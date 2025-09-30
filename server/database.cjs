@@ -527,12 +527,21 @@ const DatabaseService = {
     }
   },
 
-  async addWorkHistory(userId, serviceId, serviceName, fileName, creditsUsed, status = 'completed', resultFiles = [], downloadUrl = null) {
+  async addWorkHistory(userId, workItem) {
     try {
       const result = await pool.query(
         `INSERT INTO work_history (user_id, service_id, service_name, file_name, credits_used, status, result_files, download_url)
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8) RETURNING *`,
-        [userId, serviceId, serviceName, fileName, creditsUsed, status, JSON.stringify(resultFiles), downloadUrl]
+        [
+          userId,
+          workItem.serviceId,
+          workItem.serviceName,
+          workItem.fileName,
+          workItem.creditsUsed,
+          workItem.status || 'completed',
+          workItem.resultFiles || '[]',
+          workItem.downloadUrl || null
+        ]
       );
       return result.rows[0];
     } catch (error) {

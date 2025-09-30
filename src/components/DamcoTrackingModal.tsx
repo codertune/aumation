@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Search, Truck, MapPin, Calendar, Package, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface DamcoTrackingModalProps {
   isOpen: boolean;
@@ -27,14 +28,12 @@ interface TrackingEvent {
 }
 
 export default function DamcoTrackingModal({ isOpen, onClose }: DamcoTrackingModalProps) {
+  const { user } = useAuth();
   const [trackingNumber, setTrackingNumber] = useState('');
   const [isTracking, setIsTracking] = useState(false);
   const [trackingResult, setTrackingResult] = useState<TrackingResult | null>(null);
   const [error, setError] = useState('');
-
-  const demoTrackingData: { [key: string]: TrackingResult } = {
-    // Demo data removed - will be populated with real tracking data
-  };
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const handleTrack = async () => {
     if (!trackingNumber.trim()) {
@@ -45,19 +44,32 @@ export default function DamcoTrackingModal({ isOpen, onClose }: DamcoTrackingMod
     setIsTracking(true);
     setError('');
     setTrackingResult(null);
+    setDownloadUrl(null);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      const response = await fetch('/api/track-container', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          trackingNumber: trackingNumber.toUpperCase(),
+          userId: user?.id
+        })
+      });
 
-    const result = demoTrackingData[trackingNumber.toUpperCase()];
-    
-    if (result) {
-      setTrackingResult(result);
-    } else {
-      setError('Tracking number not found. Please check the number and try again.');
+      const result = await response.json();
+
+      if (result.success && result.trackingData) {
+        setTrackingResult(result.trackingData);
+        setDownloadUrl(result.downloadUrl);
+      } else {
+        setError(result.message || 'Tracking number not found. Please check and try again.');
+      }
+    } catch (error: any) {
+      setError('Failed to track container. Please try again later.');
+      console.error('Tracking error:', error);
+    } finally {
+      setIsTracking(false);
     }
-
-    setIsTracking(false);
   };
 
   const getStatusIcon = (status: string) => {
@@ -236,16 +248,20 @@ export default function DamcoTrackingModal({ isOpen, onClose }: DamcoTrackingMod
 
                 {/* Actions */}
                 <div className="flex justify-end space-x-3">
-                  <button
-                    onClick={() => alert('PDF report downloaded!')}
-                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors"
-                  >
-                    Download PDF Report
-                  </button>
+                  {downloadUrl && (
+                    <a
+                      href={downloadUrl}
+                      download
+                      className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-colors inline-block"
+                    >
+                      Download PDF Report
+                    </a>
+                  )}
                   <button
                     onClick={() => {
                       setTrackingResult(null);
                       setTrackingNumber('');
+                      setDownloadUrl(null);
                     }}
                     className="bg-gray-500 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition-colors"
                   >
