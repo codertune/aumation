@@ -1,0 +1,39 @@
+{
+  "creditsPerBDT": 2,
+  "creditsPerProcess": 0.5,
+  "freeTrialCredits": 100,
+  "minPurchaseCredits": 200,
+  "systemNotification": {
+    "enabled": false,
+    "message": "",
+    "type": "info",
+    "showToAll": true
+  },
+  "enabledServices": [
+    "ctg-port-tracking",
+    "exp-issue",
+    "exp-correction",
+    "exp-duplicate-reporting",
+    "exp-search",
+    "damco-booking",
+    "damco-booking-download",
+    "damco-fcr-submission",
+    "damco-fcr-extractor",
+    "damco-edoc-upload",
+    "hm-einvoice-create",
+    "hm-einvoice-download",
+    "hm-einvoice-correction",
+    "hm-packing-list",
+    "bepza-ep-issue",
+    "bepza-ep-submission",
+    "bepza-ep-download",
+    "bepza-ip-issue",
+    "bepza-ip-submit",
+    "bepza-ip-download",
+    "cash-incentive-application",
+    "damco-tracking-maersk",
+    "myshipment-tracking",
+    "egm-download",
+    "custom-tracking"
+  ]
+}
