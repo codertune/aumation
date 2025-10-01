@@ -29,6 +29,7 @@ class CtgPortTrackingAutomation:
         self.headless = headless
         self.results = []
         self.base_url = "https://cpatos.gov.bd/pcs/"
+        self.user_data_dir = None
         
     def setup_logging(self):
         """Setup logging configuration"""
@@ -68,12 +69,16 @@ class CtgPortTrackingAutomation:
         chrome_options.add_argument("--metrics-recording-only")
         chrome_options.add_argument("--mute-audio")
         chrome_options.add_argument("--no-first-run")
-        chrome_options.add_argument("--remote-debugging-port=9222")
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 
         # Force unique profile directory per run to avoid "already in use"
-        user_data_dir = tempfile.mkdtemp()
+        # Use timestamp-based unique identifier for complete isolation
+        unique_id = f"{os.getpid()}_{int(time.time() * 1000)}"
+        user_data_dir = tempfile.mkdtemp(prefix=f"chrome_user_data_{unique_id}_")
         chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+
+        # Store user_data_dir for cleanup
+        self.user_data_dir = user_data_dir
 
         # Disable automation detection
         chrome_options.add_experimental_option("useAutomationExtension", False)
@@ -394,7 +399,18 @@ class CtgPortTrackingAutomation:
             if self.driver:
                 self.logger.info("🔒 Closing browser and cleaning up...")
                 self.driver.quit()
-                self.logger.info("✅ Cleanup completed")
+                self.logger.info("✅ Browser closed")
+
+            # Clean up temporary user data directory
+            if hasattr(self, 'user_data_dir') and os.path.exists(self.user_data_dir):
+                import shutil
+                try:
+                    shutil.rmtree(self.user_data_dir)
+                    self.logger.info(f"✅ Cleaned up temp directory: {self.user_data_dir}")
+                except Exception as e:
+                    self.logger.warning(f"⚠️ Could not remove temp directory: {str(e)}")
+
+            self.logger.info("✅ Cleanup completed")
         except Exception as e:
             self.logger.error(f"❌ Error during cleanup: {str(e)}")
             

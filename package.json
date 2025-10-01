@@ -6,8 +6,12 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.cjs",
-    "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
+    "worker": "node server/queueWorker.cjs",
+    "dev:full": "concurrently \"npm run server\" \"npm run worker\" \"npm run dev\"",
     "start": "node server/index.cjs",
+    "start:worker": "node server/queueWorker.cjs",
+    "start:all": "concurrently \"npm run start\" \"npm run start:worker\"",
+    "cleanup": "node server/cleanupUtil.cjs",
     "build": "vite build",
     "preview": "vite preview",
     "install-deps": "npm install && pip3 install selenium pandas openpyxl beautifulsoup4 requests webdriver-manager",
@@ -16,6 +20,7 @@
     "db:schema": "psql -h $DB_HOST -U $DB_USER -d $DB_NAME -f database-schema.sql"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
     "archiver": "^7.0.1",
     "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",

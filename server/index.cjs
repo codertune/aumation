@@ -7,6 +7,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const { initDatabase, DatabaseService } = require('./database.cjs');
 const BulkUploadService = require('./bulkUploadService.cjs');
+const QueueService = require('./queueService.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -1062,6 +1063,214 @@ app.get('/api/cleanup/logs', async (req, res) => {
       success: false,
       message: 'Failed to fetch cleanup logs'
     });
+  }
+});
+
+app.post('/api/queue/submit', upload.single('file'), async (req, res) => {
+  try {
+    const { serviceId, userId } = req.body;
+    const uploadedFile = req.file;
+
+    if (!uploadedFile) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    if (!serviceId) {
+      return res.status(400).json({ success: false, message: 'Service ID is required' });
+    }
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    const serviceNames = {
+      'damco-tracking-maersk': 'Damco Tracking (Maersk)',
+      'ctg-port-tracking': 'CTG Port Tracking',
+      'pdf-excel-converter': 'PDF to Excel Converter'
+    };
+
+    const serviceName = serviceNames[serviceId] || serviceId;
+    const creditsRequired = getServiceCredits(serviceId);
+
+    const result = await QueueService.addJobToQueue(
+      userId,
+      serviceId,
+      serviceName,
+      uploadedFile.path,
+      uploadedFile.originalname,
+      creditsRequired,
+      0
+    );
+
+    if (result.success) {
+      const queueInfo = await QueueService.getQueueInfo();
+
+      res.json({
+        success: true,
+        message: 'Job added to queue successfully',
+        jobId: result.job.id,
+        queuePosition: result.job.queue_position,
+        queueLength: queueInfo.pendingJobs,
+        estimatedWaitTime: queueInfo.estimatedWaitTimeSeconds
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: 'Failed to add job to queue',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Queue submit error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/queue/status/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { userId } = req.query;
+
+    const result = await QueueService.getJobStatus(jobId, userId);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(404).json(result);
+    }
+  } catch (error) {
+    console.error('Queue status error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/queue/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { limit } = req.query;
+
+    const result = await QueueService.getUserJobs(userId, limit ? parseInt(limit) : 50);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Get user jobs error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/queue/cancel/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    const result = await QueueService.cancelJob(jobId, userId);
+
+    if (result.success) {
+      res.json({ success: true, message: 'Job cancelled successfully' });
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error('Cancel job error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/queue/info', async (req, res) => {
+  try {
+    const result = await QueueService.getQueueInfo();
+    res.json(result);
+  } catch (error) {
+    console.error('Queue info error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/queue/results/:jobId', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'User ID is required' });
+    }
+
+    const result = await QueueService.getJobResults(jobId, userId);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error('Get job results error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/admin/queue/all', async (req, res) => {
+  try {
+    const filters = {
+      status: req.query.status,
+      userId: req.query.userId,
+      serviceId: req.query.serviceId,
+      fromDate: req.query.fromDate,
+      toDate: req.query.toDate,
+      limit: req.query.limit ? parseInt(req.query.limit) : 100
+    };
+
+    const result = await QueueService.getAllJobs(filters);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Get all jobs error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/admin/workers', async (req, res) => {
+  try {
+    const result = await QueueService.getWorkerStatus();
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Get workers error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/admin/queue/cleanup', async (req, res) => {
+  try {
+    const result = await QueueService.cleanupExpiredJobs();
+
+    if (result.success) {
+      res.json({
+        success: true,
+        message: 'Cleanup completed successfully',
+        ...result
+      });
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Queue cleanup error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
