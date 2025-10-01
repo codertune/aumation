@@ -41,8 +41,8 @@ def main():
             results = automation.results
 
         elif script_name == 'ctg_port_tracking':
-            from ctg_port_tracking import CTGPortTrackingAutomation
-            automation = CTGPortTrackingAutomation(headless=True)
+            from ctg_port_tracking import CtgPortTrackingAutomation
+            automation = CtgPortTrackingAutomation(headless=True)
             success = automation.run_automation(file_path)
             results = getattr(automation, 'results', [])
 
