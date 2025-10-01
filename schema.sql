@@ -135,10 +135,14 @@ CREATE TABLE IF NOT EXISTS public.service_templates (
 -- ======================
 CREATE TABLE IF NOT EXISTS public.cleanup_logs (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    job_type varchar(50) NOT NULL,
-    details text,
-    run_at timestamptz DEFAULT now(),
-    deleted_count integer DEFAULT 0
+    cleanup_date timestamptz NOT NULL DEFAULT now(),
+    files_deleted integer NOT NULL DEFAULT 0,
+    space_freed_mb numeric(10,2) DEFAULT 0,
+    work_history_ids jsonb DEFAULT '[]'::jsonb,
+    bulk_upload_ids jsonb DEFAULT '[]'::jsonb,
+    status varchar(20) DEFAULT 'success',
+    error_message text,
+    created_at timestamptz DEFAULT now()
 );
 
 -- ======================
