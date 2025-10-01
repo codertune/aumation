@@ -427,27 +427,114 @@ export default function AdminDashboard() {
         {/* Services Tab */}
         {activeTab === 'services' && (
           <div className="bg-white rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">Service Management</h2>
-            
-            <div className="grid gap-4">
-              {allServices.map(service => (
-                <div key={service.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div>
-                    <h3 className="font-medium text-gray-900">{service.name}</h3>
-                    <p className="text-sm text-gray-500">{service.category}</p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={isServiceEnabled(service.id)}
-                      onChange={() => toggleService(service.id)}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                </div>
-              ))}
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Service Management</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {allServices.filter(s => isServiceEnabled(s.id)).length} of {allServices.length} services enabled
+                </p>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => {
+                    allServices.forEach(service => {
+                      if (!isServiceEnabled(service.id)) {
+                        toggleService(service.id);
+                      }
+                    });
+                  }}
+                  className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors text-sm"
+                >
+                  Enable All
+                </button>
+                <button
+                  onClick={() => {
+                    allServices.forEach(service => {
+                      if (isServiceEnabled(service.id)) {
+                        toggleService(service.id);
+                      }
+                    });
+                  }}
+                  className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors text-sm"
+                >
+                  Disable All
+                </button>
+              </div>
             </div>
+
+            {/* Group services by category */}
+            {Array.from(new Set(allServices.map(s => s.category))).map(category => {
+              const categoryServices = allServices.filter(s => s.category === category);
+              const enabledInCategory = categoryServices.filter(s => isServiceEnabled(s.id)).length;
+
+              return (
+                <div key={category} className="mb-6 last:mb-0">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <h3 className="font-semibold text-gray-900">{category}</h3>
+                      <span className="text-sm text-gray-500">({enabledInCategory}/{categoryServices.length} enabled)</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        const shouldEnable = enabledInCategory < categoryServices.length;
+                        categoryServices.forEach(service => {
+                          if (shouldEnable && !isServiceEnabled(service.id)) {
+                            toggleService(service.id);
+                          } else if (!shouldEnable && isServiceEnabled(service.id)) {
+                            toggleService(service.id);
+                          }
+                        });
+                      }}
+                      className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      {enabledInCategory === categoryServices.length ? 'Disable Category' : 'Enable Category'}
+                    </button>
+                  </div>
+                  <div className="grid gap-3">
+                    {categoryServices.map(service => (
+                      <div
+                        key={service.id}
+                        className={`flex items-center justify-between p-4 border-2 rounded-lg transition-all ${
+                          isServiceEnabled(service.id)
+                            ? 'border-green-200 bg-green-50'
+                            : 'border-gray-200 bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3">
+                            <h4 className="font-medium text-gray-900">{service.name}</h4>
+                            {isServiceEnabled(service.id) ? (
+                              <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
+                                ENABLED
+                              </span>
+                            ) : (
+                              <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs font-semibold rounded-full">
+                                DISABLED
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-4 mt-1">
+                            <p className="text-sm text-gray-500">{service.category}</p>
+                            <span className="text-xs text-blue-600 font-medium">
+                              {getServiceCreditCost(service.id)} credits
+                            </span>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={isServiceEnabled(service.id)}
+                            onChange={() => toggleService(service.id)}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 

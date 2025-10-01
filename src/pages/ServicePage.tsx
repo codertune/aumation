@@ -414,14 +414,10 @@ export default function ServicePage() {
           <div className="mt-12 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-8 text-white">
             <div className="text-center">
               <h3 className="text-2xl font-bold mb-4">Credit System Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <div className="text-3xl font-bold mb-2">{creditSettings.creditsPerBDT}</div>
                   <div className="text-blue-100">Credits per BDT</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold mb-2">{creditSettings.creditsPerProcess}</div>
-                  <div className="text-blue-100">Credits per Process</div>
                 </div>
                 <div>
                   <div className="text-3xl font-bold mb-2">{creditSettings.freeTrialCredits}</div>
@@ -433,7 +429,7 @@ export default function ServicePage() {
                 </div>
               </div>
               <p className="mt-6 text-blue-100">
-                New users get {creditSettings.freeTrialCredits} free credits to try our services. 
+                New users get {creditSettings.freeTrialCredits} free credits to try our services.
                 Exchange rate: ?{(1/creditSettings.creditsPerBDT).toFixed(2)} = 1 Credit
               </p>
             </div>
