@@ -540,7 +540,7 @@ app.post('/api/process-automation', upload.single('file'), async (req, res) => {
           fileName: uploadedFile.originalname,
           creditsUsed: getServiceCredits(serviceId),
           status: 'completed',
-          resultFiles: JSON.stringify(resultFiles),
+          resultFiles: resultFiles,
           downloadUrl
         });
 
@@ -561,7 +561,7 @@ app.post('/api/process-automation', upload.single('file'), async (req, res) => {
           fileName: uploadedFile.originalname,
           creditsUsed: 0,
           status: 'failed',
-          resultFiles: JSON.stringify([]),
+          resultFiles: [],
           downloadUrl: null
         });
 
@@ -638,7 +638,7 @@ app.post('/api/track-container', async (req, res) => {
           fileName: trackingNumber,
           creditsUsed: 1,
           status: 'completed',
-          resultFiles: JSON.stringify(resultFiles),
+          resultFiles: resultFiles,
           downloadUrl
         });
 
@@ -863,7 +863,7 @@ async function processBulkUploadAsync(bulkUploadId, serviceId, userId, rows) {
           fileName: `Row ${item.row_number}`,
           creditsUsed,
           status: 'completed',
-          resultFiles: JSON.stringify(result.resultFiles || []),
+          resultFiles: result.resultFiles || [],
           downloadUrl: result.resultFiles && result.resultFiles[0]
             ? `/api/download/${result.resultFiles[0]}`
             : null

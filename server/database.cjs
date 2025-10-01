@@ -551,6 +551,10 @@ const DatabaseService = {
 
   async addWorkHistory(userId, workItem) {
     try {
+      const resultFilesJson = typeof workItem.resultFiles === 'string'
+        ? workItem.resultFiles
+        : JSON.stringify(workItem.resultFiles || []);
+
       const result = await pool.query(
         `INSERT INTO work_history (user_id, service_id, service_name, file_name, credits_used, status, result_files, download_url, expires_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW() + INTERVAL '7 days') RETURNING *`,
@@ -561,7 +565,7 @@ const DatabaseService = {
           workItem.fileName,
           workItem.creditsUsed,
           workItem.status || 'completed',
-          workItem.resultFiles || '[]',
+          resultFilesJson,
           workItem.downloadUrl || null
         ]
       );
