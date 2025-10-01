@@ -9,20 +9,32 @@ let pool;
 // Initialize PostgreSQL database connection pool
 async function initDatabase() {
   try {
-    pool = new Pool({
-      user: process.env.DB_USER,
-      host: process.env.DB_HOST,
-      database: process.env.DB_NAME,
-      password: process.env.DB_PASSWORD,
-      port: process.env.DB_PORT,
+    const dbConfig = {
+      user: process.env.DB_USER || 'postgres',
+      host: process.env.DB_HOST || 'db.uvbfnayviqzsdmxwhgsw.supabase.co',
+      database: process.env.DB_NAME || 'postgres',
+      password: process.env.DB_PASSWORD || '',
+      port: parseInt(process.env.DB_PORT || '5432'),
       ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+    };
+
+    console.log('Connecting to database:', {
+      host: dbConfig.host,
+      database: dbConfig.database,
+      user: dbConfig.user,
+      port: dbConfig.port,
+      ssl: !!dbConfig.ssl
     });
 
-    await pool.connect();
+    pool = new Pool(dbConfig);
+
+    const client = await pool.connect();
     console.log('? PostgreSQL database connected successfully');
+    client.release();
 
   } catch (error) {
     console.error('? Database connection error:', error);
+    console.error('Error details:', error.message);
     throw error;
   }
 }

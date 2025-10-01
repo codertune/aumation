@@ -1,13 +1,14 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const DatabaseService = require('./database.cjs');
+const { DatabaseService } = require('./database.cjs');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -29,6 +30,430 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 DatabaseService.initDatabase().catch(console.error);
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and password are required'
+      });
+    }
+
+    const user = await DatabaseService.authenticateUser(email, password);
+
+    res.json({
+      success: true,
+      message: 'Login successful',
+      user
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(401).json({
+      success: false,
+      message: error.message || 'Invalid email or password'
+    });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, name, company, mobile } = req.body;
+
+    if (!email || !password || !name || !company || !mobile) {
+      return res.status(400).json({
+        success: false,
+        message: 'All fields are required'
+      });
+    }
+
+    const user = await DatabaseService.createUser(email, password, name, company, mobile);
+
+    res.json({
+      success: true,
+      message: 'Account created successfully',
+      user
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Registration failed'
+    });
+  }
+});
+
+app.post('/api/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required'
+      });
+    }
+
+    const resetData = await DatabaseService.generatePasswordResetToken(email);
+
+    res.json({
+      success: true,
+      message: 'Password reset instructions sent to your email',
+      token: resetData.token
+    });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to process password reset request'
+    });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and new password are required'
+      });
+    }
+
+    const result = await DatabaseService.resetPassword(token, newPassword);
+
+    res.json({
+      success: true,
+      message: result.message
+    });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to reset password'
+    });
+  }
+});
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await DatabaseService.getAllUsers();
+    res.json({
+      success: true,
+      users
+    });
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch users'
+    });
+  }
+});
+
+app.get('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await DatabaseService.getUserById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch user'
+    });
+  }
+});
+
+app.put('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const user = await DatabaseService.updateUser(id, updates);
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user
+    });
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update user'
+    });
+  }
+});
+
+app.delete('/api/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await DatabaseService.deleteUser(id);
+
+    res.json({
+      success: true,
+      message: 'User deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete user'
+    });
+  }
+});
+
+app.post('/api/users/:userId/credits', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { credits, operation } = req.body;
+
+    if (!credits || !operation) {
+      return res.status(400).json({
+        success: false,
+        message: 'Credits and operation are required'
+      });
+    }
+
+    const result = await DatabaseService.updateCredits(userId, credits, operation);
+
+    res.json({
+      success: true,
+      message: 'Credits updated successfully',
+      newCredits: result.newCredits,
+      oldCredits: result.oldCredits
+    });
+  } catch (error) {
+    console.error('Update credits error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update credits'
+    });
+  }
+});
+
+app.get('/api/settings', async (req, res) => {
+  try {
+    const settings = await DatabaseService.getSystemSettings();
+    res.json({
+      success: true,
+      settings
+    });
+  } catch (error) {
+    console.error('Get settings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch settings'
+    });
+  }
+});
+
+app.put('/api/settings', async (req, res) => {
+  try {
+    const settings = req.body;
+    const updatedSettings = await DatabaseService.updateSystemSettings(settings);
+
+    res.json({
+      success: true,
+      message: 'Settings updated successfully',
+      settings: updatedSettings
+    });
+  } catch (error) {
+    console.error('Update settings error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update settings'
+    });
+  }
+});
+
+app.get('/api/work-history/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const workHistory = await DatabaseService.getWorkHistory(userId);
+
+    res.json({
+      success: true,
+      workHistory
+    });
+  } catch (error) {
+    console.error('Get work history error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch work history'
+    });
+  }
+});
+
+app.post('/api/work-history', async (req, res) => {
+  try {
+    const { userId, ...workItem } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'User ID is required'
+      });
+    }
+
+    const workHistory = await DatabaseService.addWorkHistory(userId, workItem);
+
+    res.json({
+      success: true,
+      message: 'Work history added successfully',
+      workHistory
+    });
+  } catch (error) {
+    console.error('Add work history error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to add work history'
+    });
+  }
+});
+
+app.put('/api/work-history/:workId/files', async (req, res) => {
+  try {
+    const { workId } = req.params;
+    const { resultFiles } = req.body;
+
+    if (!resultFiles) {
+      return res.status(400).json({
+        success: false,
+        message: 'Result files are required'
+      });
+    }
+
+    const workHistory = await DatabaseService.updateWorkHistoryFiles(workId, resultFiles);
+
+    res.json({
+      success: true,
+      message: 'Work history files updated successfully',
+      workHistory
+    });
+  } catch (error) {
+    console.error('Update work history files error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update work history files'
+    });
+  }
+});
+
+app.get('/api/blog', async (req, res) => {
+  try {
+    const posts = await DatabaseService.getBlogPosts();
+    res.json({
+      success: true,
+      posts
+    });
+  } catch (error) {
+    console.error('Get blog posts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch blog posts'
+    });
+  }
+});
+
+app.get('/api/blog/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const posts = await DatabaseService.getBlogPosts();
+    const post = posts.find(p => p.id === id);
+
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Blog post not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      post
+    });
+  } catch (error) {
+    console.error('Get blog post error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch blog post'
+    });
+  }
+});
+
+app.post('/api/blog', async (req, res) => {
+  try {
+    const postData = req.body;
+    const post = await DatabaseService.addBlogPost(postData);
+
+    res.json({
+      success: true,
+      message: 'Blog post created successfully',
+      post
+    });
+  } catch (error) {
+    console.error('Add blog post error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create blog post'
+    });
+  }
+});
+
+app.put('/api/blog/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = req.body;
+
+    const post = await DatabaseService.updateBlogPost(id, updates);
+
+    res.json({
+      success: true,
+      message: 'Blog post updated successfully',
+      post
+    });
+  } catch (error) {
+    console.error('Update blog post error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update blog post'
+    });
+  }
+});
+
+app.delete('/api/blog/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await DatabaseService.deleteBlogPost(id);
+
+    res.json({
+      success: true,
+      message: 'Blog post deleted successfully'
+    });
+  } catch (error) {
+    console.error('Delete blog post error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete blog post'
+    });
+  }
+});
 
 app.post('/api/process-automation', upload.single('file'), async (req, res) => {
   try {
