@@ -11,7 +11,7 @@ import BlogPage from './pages/BlogPage';
 import ContactPage from './pages/ContactPage';
 import PrivacyPage from './pages/PrivacyPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
-import Dashboard from './pages/Dashboard';
+import Dashboard from './pages/NewDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 
 interface ProtectedRouteProps {
