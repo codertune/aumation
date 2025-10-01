@@ -9,6 +9,7 @@ import sys
 import time
 import logging
 import pandas as pd
+import tempfile
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -49,7 +50,7 @@ class ExampleAutomation:
     def setup_driver(self):
         """Setup Chrome WebDriver with options"""
         self.logger.info("🔧 Initializing Chrome WebDriver...")
-        
+
         chrome_options = Options()
         if self.headless:
             chrome_options.add_argument("--headless=new")
@@ -57,20 +58,45 @@ class ExampleAutomation:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--start-maximized")
-        
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-background-networking")
+        chrome_options.add_argument("--disable-default-apps")
+        chrome_options.add_argument("--disable-sync")
+        chrome_options.add_argument("--disable-translate")
+        chrome_options.add_argument("--metrics-recording-only")
+        chrome_options.add_argument("--mute-audio")
+        chrome_options.add_argument("--no-first-run")
+        chrome_options.add_argument("--remote-debugging-port=9222")
+
+        # Force unique profile directory per run to avoid "already in use"
+        user_data_dir = tempfile.mkdtemp()
+        chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+
         try:
-            # For production, use ChromeDriverManager
-            # service = Service(ChromeDriverManager().install())
-            # For local development, specify path
-            service = Service('/usr/bin/chromedriver')  # Adjust path as needed
+            # Use system-installed chromedriver for WebContainer compatibility
+            chromedriver_paths = [
+                '/usr/bin/chromedriver',
+                '/usr/local/bin/chromedriver',
+                'chromedriver'
+            ]
+            chromedriver_path = None
+            for path in chromedriver_paths:
+                if os.path.exists(path) or path == 'chromedriver':
+                    chromedriver_path = path
+                    break
+
+            if not chromedriver_path:
+                raise Exception("ChromeDriver not found. Please install chromium-chromedriver")
+
+            service = Service(chromedriver_path)
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
             self.wait = WebDriverWait(self.driver, 20)
             
             # Ensure results directories exist
             os.makedirs("results", exist_ok=True)
             os.makedirs("results/pdfs", exist_ok=True)
-            
-            self.logger.info("✅ Chrome WebDriver setup completed")
+
+            self.logger.info(f"✅ Chrome WebDriver setup completed using: {chromedriver_path}")
             return True
         except Exception as e:
             self.logger.error(f"❌ Failed to setup Chrome WebDriver: {str(e)}")

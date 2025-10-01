@@ -10,6 +10,7 @@ import time
 import logging
 import pandas as pd
 import base64
+import tempfile
 from datetime import datetime
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -51,7 +52,7 @@ class CtgPortTrackingAutomation:
     def setup_driver(self):
         """Setup Chrome WebDriver with options"""
         self.logger.info("🔧 Initializing Chrome WebDriver...")
-        
+
         chrome_options = Options()
         if self.headless:
             chrome_options.add_argument("--headless=new")
@@ -59,8 +60,21 @@ class CtgPortTrackingAutomation:
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--start-maximized")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--disable-background-networking")
+        chrome_options.add_argument("--disable-default-apps")
+        chrome_options.add_argument("--disable-sync")
+        chrome_options.add_argument("--disable-translate")
+        chrome_options.add_argument("--metrics-recording-only")
+        chrome_options.add_argument("--mute-audio")
+        chrome_options.add_argument("--no-first-run")
+        chrome_options.add_argument("--remote-debugging-port=9222")
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-        
+
+        # Force unique profile directory per run to avoid "already in use"
+        user_data_dir = tempfile.mkdtemp()
+        chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
+
         # Disable automation detection
         chrome_options.add_experimental_option("useAutomationExtension", False)
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
