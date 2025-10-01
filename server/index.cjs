@@ -461,8 +461,17 @@ app.post('/api/process-automation', upload.single('file'), async (req, res) => {
     const { serviceId, userId } = req.body;
     const uploadedFile = req.file;
 
+    console.log('=== Process Automation Request ===');
+    console.log('Service ID:', serviceId);
+    console.log('User ID:', userId);
+    console.log('File:', uploadedFile?.originalname);
+
     if (!uploadedFile) {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+
+    if (!serviceId) {
+      return res.status(400).json({ success: false, message: 'Service ID is required' });
     }
 
     const scriptMap = {
@@ -471,11 +480,28 @@ app.post('/api/process-automation', upload.single('file'), async (req, res) => {
       'pdf-excel-converter': 'automation_scripts/example_automation.py'
     };
 
+    if (!scriptMap[serviceId]) {
+      console.error('Service not found in scriptMap:', serviceId);
+      console.error('Available services:', Object.keys(scriptMap));
+      return res.status(400).json({
+        success: false,
+        message: `Service '${serviceId}' is not configured. Available services: ${Object.keys(scriptMap).join(', ')}`
+      });
+    }
+
     const scriptPath = path.join(__dirname, '..', scriptMap[serviceId]);
+    console.log('Script path:', scriptPath);
+    console.log('Script exists:', fs.existsSync(scriptPath));
 
     if (!fs.existsSync(scriptPath)) {
-      return res.status(400).json({ success: false, message: 'Service not available' });
+      return res.status(400).json({
+        success: false,
+        message: `Service script not found at: ${scriptPath}`
+      });
     }
+
+    console.log('Starting Python process...');
+    console.log('Command: python3', scriptPath, uploadedFile.path);
 
     const pythonProcess = spawn('python3', [scriptPath, uploadedFile.path]);
 
@@ -492,7 +518,12 @@ app.post('/api/process-automation', upload.single('file'), async (req, res) => {
       console.error(`Python error: ${data}`);
     });
 
+    pythonProcess.on('error', (error) => {
+      console.error('Failed to start Python process:', error);
+    });
+
     pythonProcess.on('close', async (code) => {
+      console.log(`Python process exited with code: ${code}`);
       if (code === 0) {
         const resultsDir = path.join(__dirname, '../results');
         const resultFiles = fs.existsSync(resultsDir)
@@ -522,11 +553,13 @@ app.post('/api/process-automation', upload.single('file'), async (req, res) => {
           output: outputData
         });
       } else {
+        console.error('Automation failed with error:', errorData);
+
         await DatabaseService.addWorkHistory(userId, {
           serviceId,
           serviceName: getServiceName(serviceId),
           fileName: uploadedFile.originalname,
-          creditsUsed: getServiceCredits(serviceId),
+          creditsUsed: 0,
           status: 'failed',
           resultFiles: JSON.stringify([]),
           downloadUrl: null
@@ -535,7 +568,11 @@ app.post('/api/process-automation', upload.single('file'), async (req, res) => {
         res.status(500).json({
           success: false,
           message: 'Automation failed',
-          error: errorData
+          error: errorData || 'Script execution failed',
+          details: {
+            exitCode: code,
+            output: outputData
+          }
         });
       }
     });
