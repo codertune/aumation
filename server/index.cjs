@@ -5,7 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { DatabaseService } = require('./database.cjs');
+const { initDatabase, DatabaseService } = require('./database-supabase.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -29,7 +29,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-DatabaseService.initDatabase().catch(console.error);
+initDatabase().catch(console.error);
 
 app.post('/api/auth/login', async (req, res) => {
   try {

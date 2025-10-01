@@ -9,10 +9,14 @@ let pool;
 // Initialize PostgreSQL database connection pool
 async function initDatabase() {
   try {
+    if (!process.env.DB_HOST || !process.env.DB_USER || !process.env.DB_NAME) {
+      throw new Error('Missing required database environment variables. Please check your .env file.');
+    }
+
     const dbConfig = {
-      user: process.env.DB_USER || 'postgres',
-      host: process.env.DB_HOST || 'db.uvbfnayviqzsdmxwhgsw.supabase.co',
-      database: process.env.DB_NAME || 'postgres',
+      user: process.env.DB_USER,
+      host: process.env.DB_HOST,
+      database: process.env.DB_NAME,
       password: process.env.DB_PASSWORD || '',
       port: parseInt(process.env.DB_PORT || '5432'),
       ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
@@ -29,12 +33,18 @@ async function initDatabase() {
     pool = new Pool(dbConfig);
 
     const client = await pool.connect();
-    console.log('? PostgreSQL database connected successfully');
+    console.log('✅ PostgreSQL database connected successfully');
     client.release();
 
   } catch (error) {
-    console.error('? Database connection error:', error);
+    console.error('❌ Database connection error:', error);
     console.error('Error details:', error.message);
+    console.error('');
+    console.error('Troubleshooting:');
+    console.error('1. Verify your .env file has DB_HOST, DB_USER, DB_NAME, and DB_PASSWORD');
+    console.error('2. Check that your database server is running and accessible');
+    console.error('3. Verify firewall settings allow database connections');
+    console.error('4. For Supabase: Ensure DB_SSL=true and credentials are correct');
     throw error;
   }
 }
