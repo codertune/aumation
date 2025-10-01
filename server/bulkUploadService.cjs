@@ -181,12 +181,20 @@ class BulkUploadService {
         if (work.result_files) {
           const files = JSON.parse(work.result_files);
           for (const file of files) {
-            const filePath = path.join(__dirname, '../results', file);
-            if (fs.existsSync(filePath)) {
-              const stats = fs.statSync(filePath);
-              spaceFreed += stats.size;
-              fs.unlinkSync(filePath);
-              filesDeleted++;
+            // Try both results/ and results/pdfs/ directories
+            const possiblePaths = [
+              path.join(__dirname, '../results', file),
+              path.join(__dirname, '../results/pdfs', file)
+            ];
+
+            for (const filePath of possiblePaths) {
+              if (fs.existsSync(filePath)) {
+                const stats = fs.statSync(filePath);
+                spaceFreed += stats.size;
+                fs.unlinkSync(filePath);
+                filesDeleted++;
+                console.log(`Deleted expired file: ${filePath}`);
+              }
             }
           }
         }

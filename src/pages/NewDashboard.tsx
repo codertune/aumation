@@ -386,6 +386,14 @@ export default function NewDashboard() {
                   </span>
                 </div>
               </div>
+              <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-start space-x-2">
+                  <AlertCircle className="h-4 w-4 text-yellow-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-yellow-700">
+                    <span className="font-semibold">Important:</span> Files will be available for download for 7 days, then automatically deleted.
+                  </p>
+                </div>
+              </div>
             </div>
 
             <div className="space-y-3">

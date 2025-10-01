@@ -574,7 +574,10 @@ const DatabaseService = {
 
   async getWorkHistory(userId) {
     try {
-      const result = await pool.query("SELECT * FROM work_history WHERE user_id = $1 ORDER BY created_at DESC", [userId]);
+      const result = await pool.query(
+        "SELECT * FROM work_history WHERE user_id = $1 AND expires_at > NOW() ORDER BY created_at DESC",
+        [userId]
+      );
       return result.rows.map(item => ({
         id: item.id,
         userId: item.user_id,
@@ -585,7 +588,8 @@ const DatabaseService = {
         status: item.status,
         resultFiles: item.result_files, // Already JSONB
         downloadUrl: item.download_url,
-        createdAt: item.created_at
+        createdAt: item.created_at,
+        expiresAt: item.expires_at
       }));
     } catch (error) {
       console.error('? Error getting work history:', error);

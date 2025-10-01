@@ -18,6 +18,7 @@ interface WorkHistoryItem {
   status: 'completed' | 'failed' | 'processing' | 'pending';
   createdAt: string;
   downloadUrl?: string;
+  expiresAt?: string;
 }
 
 interface WorkHistoryPanelProps {
@@ -26,6 +27,41 @@ interface WorkHistoryPanelProps {
 }
 
 export default function WorkHistoryPanel({ workHistory, isProcessing }: WorkHistoryPanelProps) {
+  const getDaysUntilExpiration = (expiresAt?: string): number | null => {
+    if (!expiresAt) return null;
+    const now = new Date();
+    const expiry = new Date(expiresAt);
+    const diff = expiry.getTime() - now.getTime();
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  };
+
+  const getExpirationBadge = (expiresAt?: string) => {
+    const days = getDaysUntilExpiration(expiresAt);
+    if (days === null) return null;
+
+    if (days <= 0) {
+      return (
+        <span className="text-xs text-red-600 font-medium">
+          Expired
+        </span>
+      );
+    }
+
+    if (days <= 2) {
+      return (
+        <span className="text-xs text-orange-600 font-medium">
+          Expires in {days}d
+        </span>
+      );
+    }
+
+    return (
+      <span className="text-xs text-gray-500">
+        {days}d remaining
+      </span>
+    );
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'completed':
@@ -108,6 +144,17 @@ export default function WorkHistoryPanel({ workHistory, isProcessing }: WorkHist
           )}
         </div>
 
+        {stats.total > 0 && (
+          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <div className="flex items-start space-x-2">
+              <Clock className="h-4 w-4 text-blue-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-blue-700">
+                <span className="font-semibold">7-Day Storage:</span> Download your files within 7 days. Files are automatically deleted after expiration.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-3">
           <div className="bg-green-50 rounded-lg p-3 border border-green-200">
             <p className="text-xs text-green-600 font-medium mb-1">Completed</p>
@@ -157,26 +204,35 @@ export default function WorkHistoryPanel({ workHistory, isProcessing }: WorkHist
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-3 border-t border-gray-200">
-                  <div className="flex items-center space-x-4 text-xs text-gray-500">
-                    <div className="flex items-center space-x-1">
-                      <Calendar className="h-3 w-3" />
-                      <span>{formatDate(item.createdAt)}</span>
+                <div className="pt-3 border-t border-gray-200 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4 text-xs text-gray-500">
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="h-3 w-3" />
+                        <span>{formatDate(item.createdAt)}</span>
+                      </div>
+                      <div className="flex items-center space-x-1">
+                        <TrendingUp className="h-3 w-3" />
+                        <span>{item.creditsUsed} credits</span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <TrendingUp className="h-3 w-3" />
-                      <span>{item.creditsUsed} credits</span>
-                    </div>
+
+                    {item.expiresAt && item.status === 'completed' && (
+                      <div className="flex items-center space-x-1">
+                        <Clock className="h-3 w-3 text-gray-400" />
+                        {getExpirationBadge(item.expiresAt)}
+                      </div>
+                    )}
                   </div>
 
                   {item.downloadUrl && item.status === 'completed' && (
                     <a
                       href={item.downloadUrl}
                       download
-                      className="flex items-center space-x-1 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                      className="flex items-center justify-center space-x-1 text-xs font-medium text-blue-600 hover:text-blue-700 bg-blue-50 px-3 py-2 rounded-lg hover:bg-blue-100 transition-colors w-full"
                     >
-                      <Download className="h-3 w-3" />
-                      <span>Download</span>
+                      <Download className="h-4 w-4" />
+                      <span>Download Results</span>
                     </a>
                   )}
                 </div>
