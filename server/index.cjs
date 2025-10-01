@@ -6,6 +6,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const { initDatabase, DatabaseService } = require('./database.cjs');
+const BulkUploadService = require('./bulkUploadService.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -650,6 +651,382 @@ function getServiceCredits(serviceId) {
   };
   return credits[serviceId] || 1;
 }
+
+app.get('/api/templates', async (req, res) => {
+  try {
+    const templates = await DatabaseService.getServiceTemplates();
+    res.json({
+      success: true,
+      templates
+    });
+  } catch (error) {
+    console.error('Get templates error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch templates'
+    });
+  }
+});
+
+app.get('/api/templates/:serviceId', async (req, res) => {
+  try {
+    const { serviceId } = req.params;
+    const template = await DatabaseService.getServiceTemplate(serviceId);
+
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: 'Template not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      template
+    });
+  } catch (error) {
+    console.error('Get template error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch template'
+    });
+  }
+});
+
+app.get('/api/templates/:serviceId/download', (req, res) => {
+  try {
+    const { serviceId } = req.params;
+    const filePath = path.join(__dirname, '../public/templates', `${serviceId}-template.csv`);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Template file not found'
+      });
+    }
+
+    res.download(filePath);
+  } catch (error) {
+    console.error('Download template error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to download template'
+    });
+  }
+});
+
+app.post('/api/bulk-upload', upload.single('file'), async (req, res) => {
+  try {
+    const { serviceId, userId } = req.body;
+    const uploadedFile = req.file;
+
+    if (!uploadedFile) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    if (!serviceId || !userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Service ID and User ID are required'
+      });
+    }
+
+    const template = await DatabaseService.getServiceTemplate(serviceId);
+    if (!template) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid service ID'
+      });
+    }
+
+    const rows = await BulkUploadService.parseUploadedFile(uploadedFile.path);
+
+    if (!rows || rows.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'File is empty or invalid format'
+      });
+    }
+
+    const bulkUpload = await DatabaseService.createBulkUpload(
+      userId,
+      serviceId,
+      template.service_name,
+      uploadedFile.originalname,
+      rows.length
+    );
+
+    for (let i = 0; i < rows.length; i++) {
+      await DatabaseService.createBulkUploadItem(
+        bulkUpload.id,
+        i + 1,
+        rows[i]
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Bulk upload created successfully',
+      bulkUpload: {
+        id: bulkUpload.id,
+        totalRows: rows.length,
+        serviceName: template.service_name,
+        fileName: uploadedFile.originalname
+      }
+    });
+
+    setImmediate(() => {
+      processBulkUploadAsync(bulkUpload.id, serviceId, userId, rows);
+    });
+
+  } catch (error) {
+    console.error('Bulk upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Bulk upload failed'
+    });
+  }
+});
+
+async function processBulkUploadAsync(bulkUploadId, serviceId, userId, rows) {
+  try {
+    await DatabaseService.updateBulkUpload(bulkUploadId, { status: 'processing' });
+
+    let successCount = 0;
+    let failCount = 0;
+    let totalCredits = 0;
+    const resultFiles = [];
+
+    const items = await DatabaseService.getBulkUploadItems(bulkUploadId);
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const rowData = typeof item.row_data === 'string' ? JSON.parse(item.row_data) : item.row_data;
+
+      await DatabaseService.updateBulkUploadItem(item.id, { status: 'processing' });
+
+      const result = await BulkUploadService.processRow(
+        serviceId,
+        rowData,
+        item.row_number,
+        userId,
+        DatabaseService
+      );
+
+      if (result.success) {
+        const template = await DatabaseService.getServiceTemplate(serviceId);
+        const creditsUsed = template.credit_cost || 1;
+
+        const workHistory = await DatabaseService.addWorkHistory(userId, {
+          serviceId,
+          serviceName: template.service_name,
+          fileName: `Row ${item.row_number}`,
+          creditsUsed,
+          status: 'completed',
+          resultFiles: JSON.stringify(result.resultFiles || []),
+          downloadUrl: result.resultFiles && result.resultFiles[0]
+            ? `/api/download/${result.resultFiles[0]}`
+            : null
+        });
+
+        await DatabaseService.updateBulkUploadItem(item.id, {
+          status: 'completed',
+          workHistoryId: workHistory.id,
+          creditsUsed,
+          resultFilePath: result.resultFiles && result.resultFiles[0] || null,
+          processedAt: new Date()
+        });
+
+        await DatabaseService.updateCredits(userId, creditsUsed, 'subtract');
+
+        successCount++;
+        totalCredits += creditsUsed;
+
+        if (result.resultFiles && result.resultFiles.length > 0) {
+          resultFiles.push(...result.resultFiles.map(f => ({
+            path: path.join(__dirname, '../results/pdfs', f),
+            name: f
+          })));
+        }
+      } else {
+        await DatabaseService.updateBulkUploadItem(item.id, {
+          status: 'failed',
+          errorMessage: result.error,
+          creditsUsed: 0,
+          processedAt: new Date()
+        });
+        failCount++;
+      }
+
+      await DatabaseService.updateBulkUpload(bulkUploadId, {
+        processedRows: i + 1,
+        successfulRows: successCount,
+        failedRows: failCount,
+        creditsUsed: totalCredits
+      });
+    }
+
+    let zipPath = null;
+    if (resultFiles.length > 0) {
+      const zipFileName = `bulk_${bulkUploadId}_results.zip`;
+      zipPath = path.join(__dirname, '../results', zipFileName);
+      await BulkUploadService.createResultZip(resultFiles, zipPath);
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 7);
+
+    await DatabaseService.updateBulkUpload(bulkUploadId, {
+      status: 'completed',
+      successfulRows: successCount,
+      failedRows: failCount,
+      creditsUsed: totalCredits,
+      resultZipPath: zipPath ? `results/${path.basename(zipPath)}` : null,
+      expiresAt,
+      completedAt: new Date()
+    });
+
+    console.log(`Bulk upload ${bulkUploadId} completed: ${successCount} success, ${failCount} failed`);
+
+  } catch (error) {
+    console.error(`Error processing bulk upload ${bulkUploadId}:`, error);
+    await DatabaseService.updateBulkUpload(bulkUploadId, {
+      status: 'failed',
+      errorMessage: error.message
+    });
+  }
+}
+
+app.get('/api/bulk-uploads/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const bulkUploads = await DatabaseService.getBulkUploads(userId);
+
+    const uploadsWithExpiration = bulkUploads.map(upload => ({
+      ...upload,
+      daysUntilExpiration: BulkUploadService.getDaysUntilExpiration(upload.expires_at),
+      expirationStatus: BulkUploadService.getExpirationStatus(upload.expires_at)
+    }));
+
+    res.json({
+      success: true,
+      bulkUploads: uploadsWithExpiration
+    });
+  } catch (error) {
+    console.error('Get bulk uploads error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch bulk uploads'
+    });
+  }
+});
+
+app.get('/api/bulk-uploads/:bulkUploadId/details', async (req, res) => {
+  try {
+    const { bulkUploadId } = req.params;
+    const bulkUpload = await DatabaseService.getBulkUpload(bulkUploadId);
+
+    if (!bulkUpload) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bulk upload not found'
+      });
+    }
+
+    const items = await DatabaseService.getBulkUploadItems(bulkUploadId);
+
+    res.json({
+      success: true,
+      bulkUpload: {
+        ...bulkUpload,
+        daysUntilExpiration: BulkUploadService.getDaysUntilExpiration(bulkUpload.expires_at),
+        expirationStatus: BulkUploadService.getExpirationStatus(bulkUpload.expires_at)
+      },
+      items
+    });
+  } catch (error) {
+    console.error('Get bulk upload details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch bulk upload details'
+    });
+  }
+});
+
+app.get('/api/bulk-uploads/:bulkUploadId/download', async (req, res) => {
+  try {
+    const { bulkUploadId } = req.params;
+    const bulkUpload = await DatabaseService.getBulkUpload(bulkUploadId);
+
+    if (!bulkUpload) {
+      return res.status(404).json({
+        success: false,
+        message: 'Bulk upload not found'
+      });
+    }
+
+    if (!bulkUpload.result_zip_path) {
+      return res.status(404).json({
+        success: false,
+        message: 'No results available for download'
+      });
+    }
+
+    const zipPath = path.join(__dirname, '..', bulkUpload.result_zip_path);
+
+    if (!fs.existsSync(zipPath)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Result file not found or has expired'
+      });
+    }
+
+    res.download(zipPath);
+  } catch (error) {
+    console.error('Download bulk upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to download results'
+    });
+  }
+});
+
+app.post('/api/cleanup/run', async (req, res) => {
+  try {
+    const result = await BulkUploadService.cleanupExpiredFiles(DatabaseService);
+    res.json({
+      success: true,
+      message: 'Cleanup completed successfully',
+      result
+    });
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Cleanup failed',
+      error: error.message
+    });
+  }
+});
+
+app.get('/api/cleanup/logs', async (req, res) => {
+  try {
+    const logs = await DatabaseService.getCleanupLogs(50);
+    res.json({
+      success: true,
+      logs
+    });
+  } catch (error) {
+    console.error('Get cleanup logs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch cleanup logs'
+    });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

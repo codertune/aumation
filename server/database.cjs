@@ -699,6 +699,217 @@ const DatabaseService = {
       console.error('? Error deleting blog post:', error);
       throw error;
     }
+  },
+
+  async getServiceTemplates() {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM service_templates WHERE is_active = true ORDER BY category, service_name"
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('? Error getting service templates:', error);
+      throw error;
+    }
+  },
+
+  async getServiceTemplate(serviceId) {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM service_templates WHERE service_id = $1",
+        [serviceId]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('? Error getting service template:', error);
+      throw error;
+    }
+  },
+
+  async createBulkUpload(userId, serviceId, serviceName, originalFileName, totalRows) {
+    try {
+      const result = await pool.query(
+        `INSERT INTO bulk_uploads (user_id, service_id, service_name, original_file_name, total_rows, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'pending', NOW()) RETURNING *`,
+        [userId, serviceId, serviceName, originalFileName, totalRows]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('? Error creating bulk upload:', error);
+      throw error;
+    }
+  },
+
+  async updateBulkUpload(bulkUploadId, updates) {
+    try {
+      const fields = [];
+      const values = [];
+      let queryIndex = 1;
+
+      if (updates.processedRows !== undefined) { fields.push(`processed_rows = $${queryIndex++}`); values.push(updates.processedRows); }
+      if (updates.successfulRows !== undefined) { fields.push(`successful_rows = $${queryIndex++}`); values.push(updates.successfulRows); }
+      if (updates.failedRows !== undefined) { fields.push(`failed_rows = $${queryIndex++}`); values.push(updates.failedRows); }
+      if (updates.status !== undefined) { fields.push(`status = $${queryIndex++}`); values.push(updates.status); }
+      if (updates.creditsUsed !== undefined) { fields.push(`credits_used = $${queryIndex++}`); values.push(updates.creditsUsed); }
+      if (updates.errorMessage !== undefined) { fields.push(`error_message = $${queryIndex++}`); values.push(updates.errorMessage); }
+      if (updates.resultZipPath !== undefined) { fields.push(`result_zip_path = $${queryIndex++}`); values.push(updates.resultZipPath); }
+      if (updates.expiresAt !== undefined) { fields.push(`expires_at = $${queryIndex++}`); values.push(updates.expiresAt); }
+      if (updates.completedAt !== undefined) { fields.push(`completed_at = $${queryIndex++}`); values.push(updates.completedAt); }
+
+      if (fields.length === 0) {
+        throw new Error('No fields to update');
+      }
+
+      values.push(bulkUploadId);
+      const result = await pool.query(
+        `UPDATE bulk_uploads SET ${fields.join(', ')}, updated_at = NOW() WHERE id = $${queryIndex} RETURNING *`,
+        values
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('? Error updating bulk upload:', error);
+      throw error;
+    }
+  },
+
+  async getBulkUploads(userId) {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM bulk_uploads WHERE user_id = $1 ORDER BY created_at DESC",
+        [userId]
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('? Error getting bulk uploads:', error);
+      throw error;
+    }
+  },
+
+  async getBulkUpload(bulkUploadId) {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM bulk_uploads WHERE id = $1",
+        [bulkUploadId]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('? Error getting bulk upload:', error);
+      throw error;
+    }
+  },
+
+  async createBulkUploadItem(bulkUploadId, rowNumber, rowData) {
+    try {
+      const result = await pool.query(
+        `INSERT INTO bulk_upload_items (bulk_upload_id, row_number, row_data, status, created_at)
+         VALUES ($1, $2, $3, 'pending', NOW()) RETURNING *`,
+        [bulkUploadId, rowNumber, JSON.stringify(rowData)]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('? Error creating bulk upload item:', error);
+      throw error;
+    }
+  },
+
+  async updateBulkUploadItem(itemId, updates) {
+    try {
+      const fields = [];
+      const values = [];
+      let queryIndex = 1;
+
+      if (updates.workHistoryId !== undefined) { fields.push(`work_history_id = $${queryIndex++}`); values.push(updates.workHistoryId); }
+      if (updates.status !== undefined) { fields.push(`status = $${queryIndex++}`); values.push(updates.status); }
+      if (updates.creditsUsed !== undefined) { fields.push(`credits_used = $${queryIndex++}`); values.push(updates.creditsUsed); }
+      if (updates.errorMessage !== undefined) { fields.push(`error_message = $${queryIndex++}`); values.push(updates.errorMessage); }
+      if (updates.resultFilePath !== undefined) { fields.push(`result_file_path = $${queryIndex++}`); values.push(updates.resultFilePath); }
+      if (updates.processedAt !== undefined) { fields.push(`processed_at = $${queryIndex++}`); values.push(updates.processedAt); }
+
+      if (fields.length === 0) {
+        throw new Error('No fields to update');
+      }
+
+      values.push(itemId);
+      const result = await pool.query(
+        `UPDATE bulk_upload_items SET ${fields.join(', ')} WHERE id = $${queryIndex} RETURNING *`,
+        values
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('? Error updating bulk upload item:', error);
+      throw error;
+    }
+  },
+
+  async getBulkUploadItems(bulkUploadId) {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM bulk_upload_items WHERE bulk_upload_id = $1 ORDER BY row_number",
+        [bulkUploadId]
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('? Error getting bulk upload items:', error);
+      throw error;
+    }
+  },
+
+  async getExpiredWorkHistory() {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM work_history WHERE expires_at < NOW() AND result_files IS NOT NULL"
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('? Error getting expired work history:', error);
+      throw error;
+    }
+  },
+
+  async getExpiredBulkUploads() {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM bulk_uploads WHERE expires_at < NOW() AND result_zip_path IS NOT NULL"
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('? Error getting expired bulk uploads:', error);
+      throw error;
+    }
+  },
+
+  async logCleanup(cleanupData) {
+    try {
+      const result = await pool.query(
+        `INSERT INTO cleanup_logs (cleanup_date, files_deleted, space_freed_mb, work_history_ids, bulk_upload_ids, status, error_message, created_at)
+         VALUES (NOW(), $1, $2, $3, $4, $5, $6, NOW()) RETURNING *`,
+        [
+          cleanupData.filesDeleted,
+          cleanupData.spaceFreedMb,
+          cleanupData.workHistoryIds,
+          cleanupData.bulkUploadIds,
+          cleanupData.status,
+          cleanupData.errorMessage || null
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('? Error logging cleanup:', error);
+      throw error;
+    }
+  },
+
+  async getCleanupLogs(limit = 50) {
+    try {
+      const result = await pool.query(
+        "SELECT * FROM cleanup_logs ORDER BY cleanup_date DESC LIMIT $1",
+        [limit]
+      );
+      return result.rows;
+    } catch (error) {
+      console.error('? Error getting cleanup logs:', error);
+      throw error;
+    }
   }
 };
 
