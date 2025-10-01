@@ -13,7 +13,6 @@ import PrivacyPage from './pages/PrivacyPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
-import BulkUploadPage from './pages/BulkUploadPage';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -71,14 +70,6 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <Dashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/bulk-upload"
-            element={
-              <ProtectedRoute>
-                <BulkUploadPage />
               </ProtectedRoute>
             }
           />
