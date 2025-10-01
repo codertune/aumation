@@ -5,7 +5,7 @@ const multer = require('multer');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { initDatabase, DatabaseService } = require('./database-supabase.cjs');
+const { initDatabase, DatabaseService } = require('./database.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
