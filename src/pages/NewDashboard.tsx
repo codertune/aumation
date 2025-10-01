@@ -95,6 +95,7 @@ export default function NewDashboard() {
 
   const handleProcessAutomation = async () => {
     if (!selectedFile || !selectedService || totalCredits === 0) {
+      console.error('Missing required fields:', { selectedFile, selectedService, totalCredits });
       return;
     }
 
@@ -116,14 +117,23 @@ export default function NewDashboard() {
       formData.append('serviceId', selectedService.id);
       formData.append('userId', user!.id);
 
+      console.log('=== Starting automation ===');
+      console.log('Service ID:', selectedService.id);
+      console.log('Service Name:', selectedService.name);
+      console.log('File:', selectedFile.name);
+      console.log('User ID:', user!.id);
+
       const response = await fetch('/api/process-automation', {
         method: 'POST',
         body: formData
       });
 
       const result = await response.json();
+      console.log('Automation result:', result);
 
       if (result.success) {
+        alert(`Success! Automation completed. ${result.resultFiles?.length || 0} files generated.`);
+
         addWorkHistory(user!.id, {
           serviceId: selectedService.id,
           serviceName: selectedService.name,
@@ -140,9 +150,13 @@ export default function NewDashboard() {
         setTotalCredits(0);
         setShowConfirmation(false);
       } else {
-        alert('Automation failed: ' + result.message);
+        console.error('Automation failed:', result);
+        const errorMsg = result.error || result.message || 'Unknown error';
+        const details = result.details ? `\nExit code: ${result.details.exitCode}` : '';
+        alert('Automation failed: ' + errorMsg + details);
       }
     } catch (error: any) {
+      console.error('Error processing automation:', error);
       alert('Error processing automation: ' + error.message);
     } finally {
       setIsProcessing(false);
@@ -166,7 +180,7 @@ export default function NewDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-indigo-50">
-      <div className="max-w-[1920px] mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">
             Welcome back, {user?.name}
