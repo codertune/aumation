@@ -179,7 +179,9 @@ class BulkUploadService {
 
       for (const work of expiredWorkHistory) {
         if (work.result_files) {
-          const files = JSON.parse(work.result_files);
+          const files = typeof work.result_files === 'string'
+            ? JSON.parse(work.result_files)
+            : work.result_files;
           for (const file of files) {
             // Try both results/ and results/pdfs/ directories
             const possiblePaths = [

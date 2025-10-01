@@ -552,8 +552,8 @@ const DatabaseService = {
   async addWorkHistory(userId, workItem) {
     try {
       const result = await pool.query(
-        `INSERT INTO work_history (user_id, service_id, service_name, file_name, credits_used, status, result_files, download_url)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8) RETURNING *`,
+        `INSERT INTO work_history (user_id, service_id, service_name, file_name, credits_used, status, result_files, download_url, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NOW() + INTERVAL '7 days') RETURNING *`,
         [
           userId,
           workItem.serviceId,
@@ -575,7 +575,7 @@ const DatabaseService = {
   async getWorkHistory(userId) {
     try {
       const result = await pool.query(
-        "SELECT * FROM work_history WHERE user_id = $1 AND expires_at > NOW() ORDER BY created_at DESC",
+        "SELECT * FROM work_history WHERE user_id = $1 AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY created_at DESC",
         [userId]
       );
       return result.rows.map(item => ({
@@ -586,7 +586,7 @@ const DatabaseService = {
         fileName: item.file_name,
         creditsUsed: item.credits_used,
         status: item.status,
-        resultFiles: item.result_files, // Already JSONB
+        resultFiles: item.result_files,
         downloadUrl: item.download_url,
         createdAt: item.created_at,
         expiresAt: item.expires_at
@@ -733,8 +733,8 @@ const DatabaseService = {
   async createBulkUpload(userId, serviceId, serviceName, originalFileName, totalRows) {
     try {
       const result = await pool.query(
-        `INSERT INTO bulk_uploads (user_id, service_id, service_name, original_file_name, total_rows, status, created_at)
-         VALUES ($1, $2, $3, $4, $5, 'pending', NOW()) RETURNING *`,
+        `INSERT INTO bulk_uploads (user_id, service_id, service_name, original_file_name, total_rows, status, expires_at, created_at)
+         VALUES ($1, $2, $3, $4, $5, 'pending', NOW() + INTERVAL '7 days', NOW()) RETURNING *`,
         [userId, serviceId, serviceName, originalFileName, totalRows]
       );
       return result.rows[0];
