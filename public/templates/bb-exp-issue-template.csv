@@ -1,0 +1,6 @@
+exporter_name,exporter_address,exporter_bin,invoice_number,invoice_date,invoice_value,currency,buyer_name,buyer_address,destination_country,product_description,hs_code,quantity,unit,port_of_loading,port_of_discharge,shipment_mode
+ABC Garments Ltd,"123 Tejgaon, Dhaka",123456789012,INV2025001,2025-01-15,50000,USD,Fashion Retail Inc,"456 5th Ave, New York",USA,Cotton T-Shirts,6109100011,5000,PCS,Chittagong,New York,Sea
+XYZ Apparels,"789 Gazipur, Dhaka",234567890123,INV2025002,2025-01-16,75000,EUR,Euro Fashion GmbH,"Berlin Street 12, Germany",Germany,Denim Jeans,6203421000,3000,PCS,Chittagong,Hamburg,Sea
+Prime Textiles Ltd,"456 Narayanganj",345678901234,INV2025003,2025-01-17,60000,GBP,UK Clothing Ltd,"London Road 45, UK",United Kingdom,Polo Shirts,6105200010,4000,PCS,Chittagong,Felixstowe,Sea
+Global Exports,"321 Mirpur, Dhaka",456789012345,INV2025004,2025-01-18,85000,USD,American Brands Corp,"Los Angeles, USA",USA,Hoodies,6110300090,2500,PCS,Chittagong,Los Angeles,Air
+Smart Knitwear,"654 Savar, Dhaka",567890123456,INV2025005,2025-01-19,40000,CAD,Canadian Fashion,"Toronto, Canada",Canada,Sweaters,6110200010,3500,PCS,Chittagong,Vancouver,Sea

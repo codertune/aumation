@@ -1,0 +1,6 @@
+tracking_number,shipment_type,origin_port,destination_port
+MST2025001234,FCL,Chittagong,Hamburg
+MST2025002345,LCL,Chittagong,Rotterdam
+MST2025003456,FCL,Mongla,Singapore
+MST2025004567,LCL,Chittagong,Dubai
+MST2025005678,FCL,Chittagong,New York
