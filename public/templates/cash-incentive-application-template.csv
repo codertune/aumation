@@ -1,0 +1,6 @@
+exporter_name,exp_number,invoice_number,invoice_value,currency,product_category,incentive_percentage,bank_name,bank_account,application_date
+ABC Garments Ltd,EXP123456789,INV2025001,50000,USD,RMG,4.0,Standard Chartered,1234567890,2025-01-15
+XYZ Apparels,EXP234567890,INV2025002,75000,EUR,Knitwear,5.0,HSBC,2345678901,2025-01-16
+Prime Textiles,EXP345678901,INV2025003,60000,GBP,Woven,4.5,City Bank,3456789012,2025-01-17
+Global Exports,EXP456789012,INV2025004,85000,USD,Home Textiles,3.0,Dutch Bangla,4567890123,2025-01-18
+Smart Knitwear,EXP567890123,INV2025005,40000,CAD,Sweater,5.0,Brac Bank,5678901234,2025-01-19

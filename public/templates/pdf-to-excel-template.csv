@@ -1,0 +1,6 @@
+pdf_file_path,output_format,page_range,table_detection,quality_setting
+/uploads/invoice_001.pdf,XLSX,1-3,auto,high
+/uploads/report_002.pdf,CSV,all,manual,medium
+/uploads/statement_003.pdf,XLSX,2-5,auto,high
+/uploads/packing_004.pdf,CSV,1-2,auto,medium
+/uploads/certificate_005.pdf,XLSX,all,manual,high

@@ -1,0 +1,6 @@
+search_criteria,search_value,date_from,date_to
+exp_number,EXP123456789,2024-01-01,2025-12-31
+invoice_number,INV2025001,2025-01-01,2025-01-31
+exporter_bin,123456789012,2025-01-01,2025-01-31
+buyer_name,Fashion Retail Inc,2024-06-01,2025-01-31
+hs_code,6109100011,2025-01-01,2025-01-31

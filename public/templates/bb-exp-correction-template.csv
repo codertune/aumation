@@ -1,0 +1,6 @@
+exp_number,field_to_correct,old_value,new_value,correction_reason
+EXP123456789,invoice_value,50000,55000,Original invoice value was incorrect due to additional charges
+EXP234567890,buyer_name,Fashion Retail Inc,Fashion Retail International Inc,Company name updated after merger
+EXP345678901,hs_code,6109100011,6109100019,HS code classification corrected
+EXP456789012,quantity,5000,5200,Additional units added to shipment
+EXP567890123,destination_country,USA,Canada,Final destination changed by buyer

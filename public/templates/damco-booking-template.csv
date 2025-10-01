@@ -1,0 +1,6 @@
+shipper_name,shipper_address,consignee_name,consignee_address,port_of_loading,port_of_discharge,cargo_ready_date,container_type,container_quantity,cargo_weight,cargo_volume,commodity,hs_code
+ABC Garments Ltd,"Dhaka, Bangladesh",Fashion Retail Inc,"New York, USA",Chittagong,New York,2025-02-01,40HC,2,25000,65,Cotton Garments,6109100011
+XYZ Apparels,"Gazipur, Bangladesh",Euro Fashion GmbH,"Hamburg, Germany",Chittagong,Hamburg,2025-02-03,20GP,3,18000,45,Textile Products,6203421000
+Prime Textiles,"Narayanganj, BD",UK Clothing Ltd,"Felixstowe, UK",Chittagong,Felixstowe,2025-02-05,40HC,1,22000,60,Knit Garments,6105200010
+Global Exports,"Dhaka, Bangladesh",American Brands,"Los Angeles, USA",Chittagong,Los Angeles,2025-02-07,45HC,2,28000,75,Apparel Items,6110300090
+Smart Knitwear,"Savar, Bangladesh",Canadian Fashion,"Vancouver, Canada",Chittagong,Vancouver,2025-02-10,20GP,4,20000,50,Sweaters,6110200010

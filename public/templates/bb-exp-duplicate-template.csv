@@ -1,0 +1,6 @@
+exp_number,issue_date,exporter_name,duplicate_reason,lost_original
+EXP123456789,2025-01-15,ABC Garments Ltd,Original lost during shipment,Yes
+EXP234567890,2025-01-16,XYZ Apparels,Required by bank for LC settlement,No
+EXP345678901,2025-01-17,Prime Textiles Ltd,Original damaged in office fire,Yes
+EXP456789012,2025-01-18,Global Exports,Required by customs authority,No
+EXP567890123,2025-01-19,Smart Knitwear,Buyer requested additional copy,No
