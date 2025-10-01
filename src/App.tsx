@@ -13,6 +13,7 @@ import PrivacyPage from './pages/PrivacyPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import Dashboard from './pages/Dashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import BulkUploadPage from './pages/BulkUploadPage';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -65,21 +66,29 @@ function AppContent() {
           <Route path="/contact" element={<ContactPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route 
-            path="/dashboard" 
+          <Route
+            path="/dashboard"
             element={
               <ProtectedRoute>
                 <Dashboard />
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/admin" 
+          <Route
+            path="/bulk-upload"
+            element={
+              <ProtectedRoute>
+                <BulkUploadPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin"
             element={
               <ProtectedRoute isAdminOnly={true}>
                 <AdminDashboard />
               </ProtectedRoute>
-            } 
+            }
           />
         </Routes>
       </main>
