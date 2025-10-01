@@ -12,7 +12,8 @@ import {
   Activity,
   Zap,
   AlertCircle,
-  CheckCircle
+  CheckCircle,
+  Download
 } from 'lucide-react';
 import ServiceSelector from '../components/ServiceSelector';
 import FileUploadZone from '../components/FileUploadZone';
@@ -64,6 +65,8 @@ export default function NewDashboard() {
   const [totalCredits, setTotalCredits] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [successResult, setSuccessResult] = useState<any>(null);
 
   const enabledServices = allServices.filter(service => isServiceEnabled(service.id));
 
@@ -132,8 +135,6 @@ export default function NewDashboard() {
       console.log('Automation result:', result);
 
       if (result.success) {
-        alert(`Success! Automation completed. ${result.resultFiles?.length || 0} files generated.`);
-
         addWorkHistory(user!.id, {
           serviceId: selectedService.id,
           serviceName: selectedService.name,
@@ -144,6 +145,8 @@ export default function NewDashboard() {
           downloadUrl: result.downloadUrl
         });
 
+        setSuccessResult(result);
+        setShowSuccessModal(true);
         setSelectedService(null);
         setSelectedFile(null);
         setRowCount(0);
@@ -266,9 +269,19 @@ export default function NewDashboard() {
                 {selectedService && (
                   <>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-3">
-                        Step 2: Upload File
-                      </label>
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="block text-sm font-semibold text-gray-700">
+                          Step 2: Upload File
+                        </label>
+                        <a
+                          href={`/templates/${selectedService.id}-template.csv`}
+                          download
+                          className="flex items-center space-x-2 text-sm text-blue-600 hover:text-blue-700 font-medium bg-blue-50 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          <Download className="h-4 w-4" />
+                          <span>Download Sample</span>
+                        </a>
+                      </div>
                       <FileUploadZone
                         onFileSelect={handleFileSelect}
                         selectedFile={selectedFile}
@@ -342,6 +355,78 @@ export default function NewDashboard() {
           </div>
         </div>
       </div>
+
+      {showSuccessModal && successResult && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-8 relative">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="h-10 w-10 text-white" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">
+                Automation Complete!
+              </h3>
+              <p className="text-gray-600">
+                Successfully processed your files
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 mb-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Files Generated:</span>
+                  <span className="text-lg font-bold text-gray-900">
+                    {successResult.resultFiles?.length || 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-600">Service:</span>
+                  <span className="text-sm font-semibold text-gray-900">
+                    {successResult.serviceName}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {successResult.downloadUrl && (
+                <a
+                  href={successResult.downloadUrl}
+                  download
+                  className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white px-6 py-4 rounded-xl font-semibold hover:from-blue-600 hover:to-indigo-700 transition-all duration-200 shadow-lg"
+                >
+                  <Download className="h-5 w-5" />
+                  <span>Download Results</span>
+                </a>
+              )}
+
+              {successResult.resultFiles && successResult.resultFiles.length > 0 && (
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                  <p className="text-xs font-medium text-gray-600 mb-2">Generated Files:</p>
+                  <div className="space-y-1">
+                    {successResult.resultFiles.map((file: string, idx: number) => (
+                      <div key={idx} className="flex items-center space-x-2 text-xs text-gray-700">
+                        <FileText className="h-3 w-3 text-blue-500" />
+                        <span className="truncate">{file}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => {
+                  setShowSuccessModal(false);
+                  setSuccessResult(null);
+                }}
+                className="w-full py-3 bg-gray-100 text-gray-700 rounded-xl font-semibold hover:bg-gray-200 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
