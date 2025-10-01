@@ -28,6 +28,7 @@ interface WorkHistoryItem {
   createdAt: string;
   resultFiles: string[];
   downloadUrl?: string;
+  expiresAt?: string;
 }
 
 interface CreditSettings {
@@ -924,7 +925,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           status: result.workHistory.status,
           resultFiles: result.workHistory.resultFiles,
           createdAt: result.workHistory.createdAt,
-          downloadUrl: result.workHistory.downloadUrl
+          downloadUrl: result.workHistory.downloadUrl,
+          expiresAt: result.workHistory.expiresAt
         };
         
         // Update local state
@@ -1023,6 +1025,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const interval = setInterval(cleanupOldHistory, 24 * 60 * 60 * 1000); // Daily cleanup
     return () => clearInterval(interval);
   }, []);
+
+  // Load work history when user logs in
+  useEffect(() => {
+    if (user && user.id) {
+      console.log('? Loading work history for user:', user.id);
+      fetch(`/api/work-history/${user.id}`)
+        .then(response => response.json())
+        .then(result => {
+          if (result.success && result.workHistory) {
+            console.log('? Loaded work history:', result.workHistory.length, 'items');
+            const updatedUser = { ...user, workHistory: result.workHistory };
+            setUser(updatedUser);
+            localStorage.setItem('currentUser', JSON.stringify(updatedUser));
+          }
+        })
+        .catch(error => {
+          console.error('Error loading work history:', error);
+        });
+    }
+  }, [user?.id]); // Only run when user ID changes
 
   const getBlogPosts = () => {
     return blogPosts;

@@ -569,7 +569,20 @@ const DatabaseService = {
           workItem.downloadUrl || null
         ]
       );
-      return result.rows[0];
+      const item = result.rows[0];
+      return {
+        id: item.id,
+        userId: item.user_id,
+        serviceId: item.service_id,
+        serviceName: item.service_name,
+        fileName: item.file_name,
+        creditsUsed: item.credits_used,
+        status: item.status,
+        resultFiles: item.result_files,
+        downloadUrl: item.download_url,
+        createdAt: item.created_at,
+        expiresAt: item.expires_at
+      };
     } catch (error) {
       console.error('? Error adding work history:', error);
       throw error;
