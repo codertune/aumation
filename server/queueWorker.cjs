@@ -2,17 +2,23 @@ require('dotenv').config();
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const { createClient } = require('@supabase/supabase-js');
+const { Pool } = require('pg');
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const dbConfig = {
+  user: process.env.DB_USER,
+  host: process.env.DB_HOST,
+  database: process.env.DB_NAME,
+  password: process.env.DB_PASSWORD || '',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
+};
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  console.error('Missing Supabase configuration');
+if (!dbConfig.host || !dbConfig.user || !dbConfig.database) {
+  console.error('Missing PostgreSQL configuration');
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const pool = new Pool(dbConfig);
 
 class AutomationQueueWorker {
   constructor() {
@@ -48,23 +54,18 @@ class AutomationQueueWorker {
 
   async registerWorker() {
     try {
-      const { data, error } = await supabase
-        .from('automation_workers')
-        .upsert({
-          worker_name: this.workerName,
-          status: 'idle',
-          last_heartbeat: new Date().toISOString(),
-          started_at: new Date().toISOString()
-        }, {
-          onConflict: 'worker_name'
-        })
-        .select()
-        .single();
+      const result = await pool.query(
+        `INSERT INTO automation_workers (worker_name, status, last_heartbeat, started_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (worker_name)
+         DO UPDATE SET status = $2, last_heartbeat = $3, started_at = $4
+         RETURNING *`,
+        [this.workerName, 'idle', new Date(), new Date()]
+      );
 
-      if (error) throw error;
-
-      console.log(`✅ Worker registered with ID: ${data.id}`);
-      this.workerId = data.id;
+      const worker = result.rows[0];
+      console.log(`✅ Worker registered with ID: ${worker.id}`);
+      this.workerId = worker.id;
     } catch (error) {
       console.error('Failed to register worker:', error);
       throw error;
@@ -75,25 +76,18 @@ class AutomationQueueWorker {
     if (!this.isRunning) return;
 
     try {
-      const updateData = {
-        last_heartbeat: new Date().toISOString(),
-        status: this.currentJobId ? 'busy' : 'idle'
-      };
+      const status = this.currentJobId ? 'busy' : 'idle';
+
+      await pool.query(
+        'UPDATE automation_workers SET last_heartbeat = $1, status = $2, current_job_id = $3 WHERE worker_name = $4',
+        [new Date(), status, this.currentJobId, this.workerName]
+      );
 
       if (this.currentJobId) {
-        updateData.current_job_id = this.currentJobId;
-      }
-
-      await supabase
-        .from('automation_workers')
-        .update(updateData)
-        .eq('worker_name', this.workerName);
-
-      if (this.currentJobId) {
-        await supabase
-          .from('automation_jobs')
-          .update({ heartbeat_at: new Date().toISOString() })
-          .eq('id', this.currentJobId);
+        await pool.query(
+          'UPDATE automation_jobs SET heartbeat_at = $1 WHERE id = $2',
+          [new Date(), this.currentJobId]
+        );
       }
     } catch (error) {
       console.error('Failed to send heartbeat:', error);
@@ -122,25 +116,24 @@ class AutomationQueueWorker {
 
   async markStuckJobs() {
     try {
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
-      const { data: stuckJobs } = await supabase
-        .from('automation_jobs')
-        .select('id')
-        .eq('status', 'processing')
-        .lt('heartbeat_at', tenMinutesAgo);
+      const result = await pool.query(
+        "SELECT id FROM automation_jobs WHERE status = 'processing' AND heartbeat_at < $1",
+        [tenMinutesAgo]
+      );
+
+      const stuckJobs = result.rows;
 
       if (stuckJobs && stuckJobs.length > 0) {
         console.log(`⚠️ Found ${stuckJobs.length} stuck jobs, marking as failed`);
 
-        await supabase
-          .from('automation_jobs')
-          .update({
-            status: 'failed',
-            error_message: 'Job timed out - no heartbeat received',
-            completed_at: new Date().toISOString()
-          })
-          .in('id', stuckJobs.map(j => j.id));
+        await pool.query(
+          `UPDATE automation_jobs
+           SET status = 'failed', error_message = $1, completed_at = $2
+           WHERE id = ANY($3)`,
+          ['Job timed out - no heartbeat received', new Date(), stuckJobs.map(j => j.id)]
+        );
       }
     } catch (error) {
       console.error('Error marking stuck jobs:', error);
@@ -149,17 +142,11 @@ class AutomationQueueWorker {
 
   async getNextJob() {
     try {
-      const { data: jobs, error } = await supabase
-        .from('automation_jobs')
-        .select('*')
-        .eq('status', 'pending')
-        .order('priority', { ascending: false })
-        .order('created_at', { ascending: true })
-        .limit(1);
+      const result = await pool.query(
+        "SELECT * FROM automation_jobs WHERE status = 'pending' ORDER BY priority DESC, created_at ASC LIMIT 1"
+      );
 
-      if (error) throw error;
-
-      return jobs && jobs.length > 0 ? jobs[0] : null;
+      return result.rows.length > 0 ? result.rows[0] : null;
     } catch (error) {
       console.error('Error fetching next job:', error);
       return null;
@@ -180,8 +167,8 @@ class AutomationQueueWorker {
     try {
       await this.updateJobStatus(job.id, {
         status: 'processing',
-        started_at: new Date().toISOString(),
-        heartbeat_at: new Date().toISOString(),
+        started_at: new Date(),
+        heartbeat_at: new Date(),
         worker_id: this.workerName
       });
 
@@ -338,12 +325,22 @@ class AutomationQueueWorker {
 
   async updateJobStatus(jobId, updates) {
     try {
-      const { error } = await supabase
-        .from('automation_jobs')
-        .update(updates)
-        .eq('id', jobId);
+      const fields = [];
+      const values = [];
+      let paramIndex = 1;
 
-      if (error) throw error;
+      for (const [key, value] of Object.entries(updates)) {
+        fields.push(`${key} = $${paramIndex}`);
+        values.push(value);
+        paramIndex++;
+      }
+
+      values.push(jobId);
+
+      await pool.query(
+        `UPDATE automation_jobs SET ${fields.join(', ')} WHERE id = $${paramIndex}`,
+        values
+      );
     } catch (error) {
       console.error(`Failed to update job ${jobId}:`, error);
     }
@@ -355,32 +352,22 @@ class AutomationQueueWorker {
     console.log(`   Result files: ${result.resultFiles.length}`);
 
     try {
-      await supabase
-        .from('automation_jobs')
-        .update({
-          status: 'completed',
-          result_files: JSON.stringify(result.resultFiles),
-          output_log: result.output,
-          credits_charged: job.credits_required,
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', job.id);
+      await pool.query(
+        `UPDATE automation_jobs
+         SET status = $1, result_files = $2, output_log = $3, credits_charged = $4, completed_at = $5
+         WHERE id = $6`,
+        ['completed', JSON.stringify(result.resultFiles), result.output, job.credits_required, new Date(), job.id]
+      );
 
-      await supabase
-        .from('automation_workers')
-        .update({
-          jobs_processed: supabase.raw('jobs_processed + 1')
-        })
-        .eq('worker_name', this.workerName);
+      await pool.query(
+        'UPDATE automation_workers SET jobs_processed = jobs_processed + 1 WHERE worker_name = $1',
+        [this.workerName]
+      );
 
-      await supabase
-        .from('job_execution_metrics')
-        .insert({
-          job_id: job.id,
-          service_id: job.service_id,
-          execution_time_seconds: executionTime,
-          success: true
-        });
+      await pool.query(
+        'INSERT INTO job_execution_metrics (job_id, service_id, execution_time_seconds, success) VALUES ($1, $2, $3, $4)',
+        [job.id, job.service_id, executionTime, true]
+      );
 
       console.log('✅ Job status updated in database');
     } catch (error) {
@@ -399,35 +386,23 @@ class AutomationQueueWorker {
       if (shouldRetry) {
         console.log(`🔄 Scheduling retry ${job.retry_count + 1}/${job.max_retries}`);
 
-        await supabase
-          .from('automation_jobs')
-          .update({
-            status: 'pending',
-            retry_count: job.retry_count + 1,
-            error_message: errorMessage
-          })
-          .eq('id', job.id);
+        await pool.query(
+          'UPDATE automation_jobs SET status = $1, retry_count = $2, error_message = $3 WHERE id = $4',
+          ['pending', job.retry_count + 1, errorMessage, job.id]
+        );
       } else {
         console.log(`❌ Max retries reached, marking as failed`);
 
-        await supabase
-          .from('automation_jobs')
-          .update({
-            status: 'failed',
-            error_message: errorMessage,
-            completed_at: new Date().toISOString()
-          })
-          .eq('id', job.id);
+        await pool.query(
+          'UPDATE automation_jobs SET status = $1, error_message = $2, completed_at = $3 WHERE id = $4',
+          ['failed', errorMessage, new Date(), job.id]
+        );
       }
 
-      await supabase
-        .from('job_execution_metrics')
-        .insert({
-          job_id: job.id,
-          service_id: job.service_id,
-          execution_time_seconds: executionTime,
-          success: false
-        });
+      await pool.query(
+        'INSERT INTO job_execution_metrics (job_id, service_id, execution_time_seconds, success) VALUES ($1, $2, $3, $4)',
+        [job.id, job.service_id, executionTime, false]
+      );
 
     } catch (error) {
       console.error('Failed to update job failure:', error);
@@ -443,14 +418,10 @@ class AutomationQueueWorker {
     }
 
     try {
-      await supabase
-        .from('automation_workers')
-        .update({
-          status: 'stopped',
-          stopped_at: new Date().toISOString(),
-          current_job_id: null
-        })
-        .eq('worker_name', this.workerName);
+      await pool.query(
+        'UPDATE automation_workers SET status = $1, stopped_at = $2, current_job_id = $3 WHERE worker_name = $4',
+        ['stopped', new Date(), null, this.workerName]
+      );
 
       console.log('✅ Worker shutdown complete');
     } catch (error) {

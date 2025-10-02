@@ -1,39 +1,25 @@
-const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 const fs = require('fs');
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+let pool;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-  throw new Error('Missing Supabase configuration');
+function setPool(dbPool) {
+  pool = dbPool;
 }
-
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
 class QueueService {
   static async addJobToQueue(userId, serviceId, serviceName, filePath, fileName, creditsRequired, priority = 0) {
     try {
-      const { data, error } = await supabase
-        .from('automation_jobs')
-        .insert({
-          user_id: userId,
-          service_id: serviceId,
-          service_name: serviceName,
-          file_path: filePath,
-          file_name: fileName,
-          credits_required: creditsRequired,
-          priority,
-          status: 'pending',
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single();
+      const result = await pool.query(
+        `INSERT INTO automation_jobs (user_id, service_id, service_name, file_path, file_name, credits_required, priority, status, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         RETURNING *`,
+        [userId, serviceId, serviceName, filePath, fileName, creditsRequired, priority, 'pending', new Date()]
+      );
 
-      if (error) throw error;
-
-      console.log(`✅ Job ${data.id} added to queue`);
-      return { success: true, job: data };
+      const job = result.rows[0];
+      console.log(`✅ Job ${job.id} added to queue`);
+      return { success: true, job };
     } catch (error) {
       console.error('Failed to add job to queue:', error);
       return { success: false, error: error.message };
@@ -42,25 +28,27 @@ class QueueService {
 
   static async getJobStatus(jobId, userId = null) {
     try {
-      let query = supabase
-        .from('automation_jobs')
-        .select('*')
-        .eq('id', jobId);
+      let query = 'SELECT * FROM automation_jobs WHERE id = $1';
+      const params = [jobId];
 
       if (userId) {
-        query = query.eq('user_id', userId);
+        query += ' AND user_id = $2';
+        params.push(userId);
       }
 
-      const { data, error } = await query.single();
+      const result = await pool.query(query, params);
 
-      if (error) throw error;
+      if (result.rows.length === 0) {
+        throw new Error('Job not found');
+      }
 
+      const job = result.rows[0];
       const queueInfo = await this.getQueueInfo();
 
       return {
         success: true,
-        job: data,
-        queuePosition: data.queue_position,
+        job,
+        queuePosition: job.queue_position,
         queueLength: queueInfo.pendingJobs
       };
     } catch (error) {
@@ -71,16 +59,12 @@ class QueueService {
 
   static async getUserJobs(userId, limit = 50) {
     try {
-      const { data, error } = await supabase
-        .from('automation_jobs')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(limit);
+      const result = await pool.query(
+        'SELECT * FROM automation_jobs WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
+        [userId, limit]
+      );
 
-      if (error) throw error;
-
-      return { success: true, jobs: data };
+      return { success: true, jobs: result.rows };
     } catch (error) {
       console.error('Failed to get user jobs:', error);
       return { success: false, error: error.message };
@@ -89,14 +73,16 @@ class QueueService {
 
   static async cancelJob(jobId, userId) {
     try {
-      const { data: job, error: fetchError } = await supabase
-        .from('automation_jobs')
-        .select('status')
-        .eq('id', jobId)
-        .eq('user_id', userId)
-        .single();
+      const jobResult = await pool.query(
+        'SELECT status FROM automation_jobs WHERE id = $1 AND user_id = $2',
+        [jobId, userId]
+      );
 
-      if (fetchError) throw fetchError;
+      if (jobResult.rows.length === 0) {
+        throw new Error('Job not found');
+      }
+
+      const job = jobResult.rows[0];
 
       if (job.status !== 'pending') {
         return {
@@ -105,16 +91,10 @@ class QueueService {
         };
       }
 
-      const { error: updateError } = await supabase
-        .from('automation_jobs')
-        .update({
-          status: 'cancelled',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', jobId)
-        .eq('user_id', userId);
-
-      if (updateError) throw updateError;
+      await pool.query(
+        'UPDATE automation_jobs SET status = $1, completed_at = $2 WHERE id = $3 AND user_id = $4',
+        ['cancelled', new Date(), jobId, userId]
+      );
 
       console.log(`✅ Job ${jobId} cancelled by user ${userId}`);
       return { success: true };
@@ -126,61 +106,56 @@ class QueueService {
 
   static async getQueueInfo() {
     try {
-      const { data: pendingJobs, error: pendingError } = await supabase
-        .from('automation_jobs')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'pending');
+      const pendingResult = await pool.query(
+        "SELECT COUNT(*) as count FROM automation_jobs WHERE status = 'pending'"
+      );
 
-      if (pendingError) throw pendingError;
+      const processingResult = await pool.query(
+        "SELECT id, started_at FROM automation_jobs WHERE status = 'processing'"
+      );
 
-      const { data: processingJobs, error: processingError } = await supabase
-        .from('automation_jobs')
-        .select('id, started_at', { count: 'exact' })
-        .eq('status', 'processing');
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+      const workersResult = await pool.query(
+        "SELECT * FROM automation_workers WHERE status = 'busy' AND last_heartbeat >= $1",
+        [twoMinutesAgo]
+      );
 
-      if (processingError) throw processingError;
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const recentResult = await pool.query(
+        "SELECT * FROM automation_jobs WHERE status IN ('completed', 'failed') AND completed_at >= $1 ORDER BY completed_at DESC LIMIT 100",
+        [oneHourAgo]
+      );
 
-      const { data: workers, error: workersError } = await supabase
-        .from('automation_workers')
-        .select('*')
-        .eq('status', 'busy')
-        .gte('last_heartbeat', new Date(Date.now() - 2 * 60 * 1000).toISOString());
+      const recentJobs = recentResult.rows;
+      const completedJobs = recentJobs.filter(j => j.status === 'completed');
+      const completedCount = completedJobs.length;
 
-      if (workersError) throw workersError;
-
-      const { data: recentJobs, error: recentError } = await supabase
-        .from('automation_jobs')
-        .select('*')
-        .in('status', ['completed', 'failed'])
-        .gte('completed_at', new Date(Date.now() - 60 * 60 * 1000).toISOString())
-        .order('completed_at', { ascending: false })
-        .limit(100);
-
-      if (recentError) throw recentError;
-
-      const completedCount = recentJobs.filter(j => j.status === 'completed').length;
       const avgExecutionTime = completedCount > 0
-        ? recentJobs
-            .filter(j => j.status === 'completed' && j.started_at && j.completed_at)
+        ? completedJobs
+            .filter(j => j.started_at && j.completed_at)
             .reduce((sum, j) => {
               const duration = new Date(j.completed_at) - new Date(j.started_at);
               return sum + duration / 1000;
             }, 0) / completedCount
         : 60;
 
+      const pendingCount = parseInt(pendingResult.rows[0].count);
+      const processingCount = processingResult.rows.length;
+      const activeWorkersCount = workersResult.rows.length;
+
       let estimatedWaitTime = null;
-      if (pendingJobs && pendingJobs.length > 0 && workers && workers.length > 0) {
-        estimatedWaitTime = Math.ceil((pendingJobs.length * avgExecutionTime) / workers.length);
+      if (pendingCount > 0 && activeWorkersCount > 0) {
+        estimatedWaitTime = Math.ceil((pendingCount * avgExecutionTime) / activeWorkersCount);
       }
 
       return {
         success: true,
-        pendingJobs: pendingJobs ? pendingJobs.length : 0,
-        processingJobs: processingJobs ? processingJobs.length : 0,
-        activeWorkers: workers ? workers.length : 0,
+        pendingJobs: pendingCount,
+        processingJobs: processingCount,
+        activeWorkers: activeWorkersCount,
         avgExecutionTimeSeconds: Math.round(avgExecutionTime),
         estimatedWaitTimeSeconds: estimatedWaitTime,
-        queueHealthy: workers && workers.length > 0
+        queueHealthy: activeWorkersCount > 0
       };
     } catch (error) {
       console.error('Failed to get queue info:', error);
@@ -197,14 +172,16 @@ class QueueService {
 
   static async getJobResults(jobId, userId) {
     try {
-      const { data: job, error } = await supabase
-        .from('automation_jobs')
-        .select('*')
-        .eq('id', jobId)
-        .eq('user_id', userId)
-        .single();
+      const result = await pool.query(
+        'SELECT * FROM automation_jobs WHERE id = $1 AND user_id = $2',
+        [jobId, userId]
+      );
 
-      if (error) throw error;
+      if (result.rows.length === 0) {
+        throw new Error('Job not found');
+      }
+
+      const job = result.rows[0];
 
       if (job.status !== 'completed') {
         return {
@@ -241,41 +218,50 @@ class QueueService {
 
   static async getAllJobs(filters = {}) {
     try {
-      let query = supabase
-        .from('automation_jobs')
-        .select('*');
+      let query = 'SELECT * FROM automation_jobs WHERE 1=1';
+      const params = [];
+      let paramIndex = 1;
 
       if (filters.status) {
-        query = query.eq('status', filters.status);
+        query += ` AND status = $${paramIndex}`;
+        params.push(filters.status);
+        paramIndex++;
       }
 
       if (filters.userId) {
-        query = query.eq('user_id', filters.userId);
+        query += ` AND user_id = $${paramIndex}`;
+        params.push(filters.userId);
+        paramIndex++;
       }
 
       if (filters.serviceId) {
-        query = query.eq('service_id', filters.serviceId);
+        query += ` AND service_id = $${paramIndex}`;
+        params.push(filters.serviceId);
+        paramIndex++;
       }
 
       if (filters.fromDate) {
-        query = query.gte('created_at', filters.fromDate);
+        query += ` AND created_at >= $${paramIndex}`;
+        params.push(filters.fromDate);
+        paramIndex++;
       }
 
       if (filters.toDate) {
-        query = query.lte('created_at', filters.toDate);
+        query += ` AND created_at <= $${paramIndex}`;
+        params.push(filters.toDate);
+        paramIndex++;
       }
 
-      query = query.order('created_at', { ascending: false });
+      query += ' ORDER BY created_at DESC';
 
       if (filters.limit) {
-        query = query.limit(filters.limit);
+        query += ` LIMIT $${paramIndex}`;
+        params.push(filters.limit);
       }
 
-      const { data, error } = await query;
+      const result = await pool.query(query, params);
 
-      if (error) throw error;
-
-      return { success: true, jobs: data };
+      return { success: true, jobs: result.rows };
     } catch (error) {
       console.error('Failed to get all jobs:', error);
       return { success: false, error: error.message };
@@ -284,21 +270,19 @@ class QueueService {
 
   static async getWorkerStatus() {
     try {
-      const { data, error } = await supabase
-        .from('automation_workers')
-        .select('*')
-        .order('last_heartbeat', { ascending: false });
+      const result = await pool.query(
+        'SELECT * FROM automation_workers ORDER BY last_heartbeat DESC'
+      );
 
-      if (error) throw error;
-
-      const activeWorkers = data.filter(w =>
+      const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
+      const activeWorkers = result.rows.filter(w =>
         w.status !== 'stopped' &&
-        new Date(w.last_heartbeat) > new Date(Date.now() - 2 * 60 * 1000)
+        new Date(w.last_heartbeat) > twoMinutesAgo
       );
 
       return {
         success: true,
-        workers: data,
+        workers: result.rows,
         activeWorkers: activeWorkers.length
       };
     } catch (error) {
@@ -309,13 +293,12 @@ class QueueService {
 
   static async cleanupExpiredJobs() {
     try {
-      const { data: expiredJobs, error: fetchError } = await supabase
-        .from('automation_jobs')
-        .select('id, result_files')
-        .lt('expires_at', new Date().toISOString())
-        .in('status', ['completed', 'failed', 'cancelled']);
+      const result = await pool.query(
+        "SELECT id, result_files FROM automation_jobs WHERE expires_at < $1 AND status IN ('completed', 'failed', 'cancelled')",
+        [new Date()]
+      );
 
-      if (fetchError) throw fetchError;
+      const expiredJobs = result.rows;
 
       if (!expiredJobs || expiredJobs.length === 0) {
         return {
@@ -349,12 +332,10 @@ class QueueService {
         }
       }
 
-      const { error: deleteError } = await supabase
-        .from('automation_jobs')
-        .delete()
-        .in('id', expiredJobs.map(j => j.id));
-
-      if (deleteError) throw deleteError;
+      await pool.query(
+        'DELETE FROM automation_jobs WHERE id = ANY($1)',
+        [expiredJobs.map(j => j.id)]
+      );
 
       console.log(`✅ Cleaned up ${expiredJobs.length} expired jobs and ${filesDeleted} files`);
 
@@ -370,4 +351,4 @@ class QueueService {
   }
 }
 
-module.exports = QueueService;
+module.exports = { QueueService, setPool };

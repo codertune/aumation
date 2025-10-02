@@ -5,9 +5,9 @@ const multer = require('multer');
 const path = require('path');
 const { spawn } = require('child_process');
 const fs = require('fs');
-const { initDatabase, DatabaseService } = require('./database.cjs');
+const { initDatabase, DatabaseService, getPool } = require('./database.cjs');
 const BulkUploadService = require('./bulkUploadService.cjs');
-const QueueService = require('./queueService.cjs');
+const { QueueService, setPool } = require('./queueService.cjs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -31,7 +31,12 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-initDatabase().catch(console.error);
+initDatabase()
+  .then(() => {
+    setPool(getPool());
+    console.log('✅ Queue service initialized with database pool');
+  })
+  .catch(console.error);
 
 app.post('/api/auth/login', async (req, res) => {
   try {

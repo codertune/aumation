@@ -934,7 +934,12 @@ const DatabaseService = {
   }
 };
 
+function getPool() {
+  return pool;
+}
+
 module.exports = {
   initDatabase,
-  DatabaseService
+  DatabaseService,
+  getPool
 };
